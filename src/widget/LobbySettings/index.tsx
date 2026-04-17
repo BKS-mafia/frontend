@@ -39,7 +39,7 @@ export interface GameSettingsDTO {
     }[];
 }
 
-const   LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }> = ({ onStart }) => {
+const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }> = ({ onStart }) => {
     const [totalPlayers, setTotalPlayers] = useState<number>(8);
     const [peopleCount, setPeopleCount] = useState<number>(5);
     const aiCount = totalPlayers - peopleCount;
@@ -74,6 +74,25 @@ const   LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void 
         ));
     }, [autoPeaceCount]);
 
+
+function canDistributeRoles(newRoles: {
+        name: string;
+        count: number;
+        canBeHuman: boolean;
+        canBeAI: boolean;
+        isAuto?: boolean;
+    }[],): boolean {
+    const humanSlots = newRoles.reduce(
+        (sum, role) => sum + (role.canBeHuman ? role.count : 0),
+        0
+    );
+    const aiSlots = newRoles.reduce(
+        (sum, role) => sum + (role.canBeAI ? role.count : 0),
+        0
+    );
+    return peopleCount <= humanSlots && aiCount <= aiSlots;
+}
+
     const handleTotalPlayersChange = (value: number | null) => {
         const newTotal = value ?? 8;
         setTotalPlayers(newTotal);
@@ -85,17 +104,24 @@ const   LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void 
     };
 
     const updateRoleCount = (index: number, newCount: number) => {
+
         const updated = [...roles];
         // Запрещаем менять count у мирного
         if (updated[index].name === 'Мирный') return;
+
         updated[index].count = Math.max(0, newCount);
+        // if (!canDistributeRoles(updated)) return;
         setRoles(updated);
+
     };
 
     const updateRoleFlag = (index: number, field: 'canBeHuman' | 'canBeAI', value: boolean) => {
+        
         const updated = [...roles];
         updated[index][field] = value;
+        // if (!canDistributeRoles(updated)) return;
         setRoles(updated);
+
     };
 
     const handleStart = () => {
@@ -111,9 +137,10 @@ const   LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void 
                 canBeAI: r.canBeAI,
             })),
         };
-        console.log('Game Settings DTO:', settings);
+        // console.log('Game Settings DTO:', settings);
         if (onStart) onStart(settings);
     };
+
 
     // Колонки таблицы
     const columns: ColumnsType<RoleConfig & { index: number }> = [
@@ -142,9 +169,9 @@ const   LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void 
                 return (
                     <InputNumber
                         min={0}
-                        max={totalPlayers}
+                        max={count + autoPeaceCount}
                         value={count}
-                        onChange={(val) => updateRoleCount(record.index, val ?? 0)}
+                        onChange={(val) => updateRoleCount(record.index, Math.trunc(val ?? 0))}
                         style={{ width: '100%' }}
                     />
                 );
@@ -159,7 +186,9 @@ const   LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void 
             render: (checked: boolean, record: any) => (
                 <Checkbox
                     checked={checked}
-                    onChange={(e) => updateRoleFlag(record.index, 'canBeHuman', e.target.checked)}
+                    onChange={(e) => {
+                        updateRoleFlag(record.index, 'canBeHuman', e.target.checked)
+                    }}
                 />
             ),
         },
@@ -208,7 +237,7 @@ const   LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void 
                             <span><RobotOutlined /> ИИ: {aiCount}</span>
                         </div>
                         <Slider
-                            min={0}
+                            min={1}
                             max={totalPlayers}
                             step={1}
                             value={peopleCount}
@@ -216,7 +245,7 @@ const   LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void 
                             tooltip={{ formatter: (val) => `${val}` }}
                         />
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Text type="secondary">0</Text>
+                            <Text type="secondary">1</Text>
                             <Text type="secondary">{totalPlayers}</Text>
                         </div>
                     </Space>
@@ -238,7 +267,7 @@ const   LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void 
 
             <Row style={{ marginTop: 24 }}>
                 <Col span={24}>
-                    {!isValidRoles && (
+                    {!isValidRoles && ( 
                         <Alert
                             message="Ошибка количества ролей"
                             description={`Сумма ролей (мафия + комиссар + доктор) = ${sumOtherRoles} не должна превышать общее число игроков (${totalPlayers})`}
