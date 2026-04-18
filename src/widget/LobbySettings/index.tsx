@@ -14,9 +14,12 @@ import {
     Row,
     Col,
     Alert,
+    message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { PlusOutlined, UserOutlined, RobotOutlined, ArrowLeftOutlined  } from '@ant-design/icons';
+import { PlusOutlined, UserOutlined, RobotOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { createRoom } from '@/src/shared/api/endpoints/rooms';
+import { getToken } from '@/src/shared/lib/getToken';
 
 const { Title, Text } = Typography;
 
@@ -42,6 +45,7 @@ export interface GameSettingsDTO {
 
 const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }> = ({ onStart }) => {
     const router = useRouter();
+    const [messageApi, contextHolder] = message.useMessage();
 
     const [totalPlayers, setTotalPlayers] = useState<number>(8);
     const [peopleCount, setPeopleCount] = useState<number>(5);
@@ -162,22 +166,38 @@ const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }>
         setRoles(updated);
     };
 
-    const handleStart = () => {
+    const handleStart = async () => {
         if (!isValid) return;
-        const settings: GameSettingsDTO = {
-            totalPlayers,
-            peopleCount,
-            aiCount,
-            roles: roles.map(r => ({
-                name: r.name,
-                count: r.name === 'Мирный' ? autoPeaceCount : r.count,
-                canBeHuman: r.canBeHuman,
-                canBeAI: r.canBeAI,
-            })),
-        };
-        const id: number = 6;
-        router.push(`/room/${id}`);
-        if (onStart) onStart(settings);
+
+        const hostToken = getToken();
+        if (!hostToken) {
+            messageApi.error('Ошибка идентификации пользователя. Перезагрузите страницу.');
+            return;
+        }
+
+        const rolesForBackend = roles.map(r => ({
+            name: r.name,
+            count: r.name === 'Мирный' ? autoPeaceCount : r.count,
+            canBeHuman: r.canBeHuman,
+            canBeAI: r.canBeAI,
+        }));
+
+        try {
+            const response = await createRoom(
+                hostToken,
+                totalPlayers,
+                peopleCount,
+                aiCount,
+                rolesForBackend
+            );
+            console.log(response)
+            messageApi.success(`Комната создана! ID: ${response.short_id || response.room_id}`);
+            // сохраняем room_id или short_id для редиректа
+            router.push(`/room/${response.short_id}`);
+        } catch (error) {
+            console.error('Ошибка создания комнаты:', error);
+            messageApi.error('Не удалось создать комнату. Попробуйте позже.');
+        }
     };
 
     const columns: ColumnsType<RoleConfig & { index: number }> = [
@@ -231,48 +251,46 @@ const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }>
 
     const tableData = roles.map((role, idx) => ({ ...role, index: idx, key: idx }));
 
-    const startPercent = ((minPeople - 1) / (totalPlayers - 1)) * 100;
-    const endPercent = ((maxPeople - 1) / (totalPlayers - 1)) * 100;
+    const startPercent = totalPlayers === 1 ? 0 : ((minPeople - 1) / (totalPlayers - 1)) * 100;
+    const endPercent = totalPlayers === 1 ? 0 : ((maxPeople - 1) / (totalPlayers - 1)) * 100;
     const railGradient = `linear-gradient(to right, 
         #ffffff 0%, #d9d9d9 ${startPercent}%, 
         #7c7c7c ${startPercent}%, #000000 ${endPercent}%, 
         #d9d9d9 ${endPercent}%, #ffffff 100%)`;
 
     return (
-        <Card style={{maxWidth: 900, margin: '2rem auto'}}>
-
-            <div style={{display: 'flex', alignItems: 'center', marginBottom: 16}}>
-                <Button icon={<ArrowLeftOutlined/>} onClick={() => router.push('/')}>
+        <Card style={{ maxWidth: 900, margin: '2rem auto' }}>
+            {contextHolder}
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+                <Button icon={<ArrowLeftOutlined />} onClick={() => router.push('/')}>
                     На главную
                 </Button>
-
             </div>
-            <Title level={3} style={{textAlign: 'center'}}>Настройки игры</Title>
+            <Title level={3} style={{ textAlign: 'center' }}>Настройки игры</Title>
 
             <Row gutter={[16, 16]} align="middle">
                 <Col span={8}><Text strong>Общее число игроков:</Text></Col>
                 <Col span={8}>
-                    <InputNumber min={4} max={20} value={totalPlayers} onChange={handleTotalPlayersChange}
-                                 style={{width: '100%'}}/>
+                    <InputNumber min={4} max={20} value={totalPlayers} onChange={handleTotalPlayersChange} style={{ width: '100%' }} />
                 </Col>
                 <Col span={8}><Text type="secondary">от 4 до 20</Text></Col>
             </Row>
 
-            <Row gutter={[16, 16]} style={{marginTop: 24}}>
+            <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
                 <Col span={24}>
-                    <Space orientation="vertical" style={{width: '100%'}}>
-                        <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                            <span><UserOutlined/> Люди: {peopleCount}</span>
-                            <span><RobotOutlined/> ИИ: {aiCount}</span>
+                    <Space orientation="vertical" style={{ width: '100%' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span><UserOutlined /> Люди: {peopleCount}</span>
+                            <span><RobotOutlined /> ИИ: {aiCount}</span>
                         </div>
-                        <div className="custom-slider-wrapper" style={{position: 'relative', marginBottom: 8}}>
+                        <div className="custom-slider-wrapper" style={{ position: 'relative', marginBottom: 8 }}>
                             <Slider
                                 min={1}
                                 max={totalPlayers}
                                 step={1}
                                 value={peopleCount}
                                 onChange={handlePeopleSliderChange}
-                                tooltip={{formatter: (val) => `${val}`}}
+                                tooltip={{ formatter: (val) => `${val}` }}
                             />
                             <div
                                 style={{
@@ -302,22 +320,20 @@ const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }>
                                 .custom-slider-wrapper :global(.ant-slider-rail) {
                                     background: transparent !important;
                                 }
-
                                 .custom-slider-wrapper :global(.ant-slider-track) {
                                     background: transparent !important;
                                 }
-
                                 .custom-slider-wrapper :global(.ant-slider-step) {
                                     background: transparent;
                                 }
                             `}</style>
                         </div>
-                        <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <Text type="secondary">1</Text>
                             <Text type="secondary">{totalPlayers}</Text>
                         </div>
                         {!isDistributionPossible && (
-                            <Text type="danger" style={{fontSize: 12}}>
+                            <Text type="danger" style={{ fontSize: 12 }}>
                                 Невозможно распределить людей и ИИ. Измените настройки ролей.
                             </Text>
                         )}
@@ -325,14 +341,14 @@ const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }>
                 </Col>
             </Row>
 
-            <Row style={{marginTop: 32}}>
+            <Row style={{ marginTop: 32 }}>
                 <Col span={24}>
                     <Title level={4}>Роли</Title>
-                    <Table columns={columns} dataSource={tableData} pagination={false} size="middle" bordered/>
+                    <Table columns={columns} dataSource={tableData} pagination={false} size="middle" bordered />
                 </Col>
             </Row>
 
-            <Row style={{marginTop: 24}}>
+            <Row style={{ marginTop: 24 }}>
                 <Col span={24}>
                     {!isValidRoles && (
                         <Alert
@@ -340,7 +356,7 @@ const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }>
                             description={`Сумма ролей (мафия + комиссар + доктор) = ${sumOtherRoles} не должна превышать общее число игроков (${totalPlayers})`}
                             type="error"
                             showIcon
-                            style={{marginBottom: 16}}
+                            style={{ marginBottom: 16 }}
                         />
                     )}
                     {autoPeaceCount < 0 && (
@@ -357,7 +373,7 @@ const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }>
                             description="Каждая роль с ненулевым количеством должна иметь возможность быть человеком или ИИ."
                             type="error"
                             showIcon
-                            style={{marginBottom: 16}}
+                            style={{ marginBottom: 16 }}
                         />
                     )}
                     {!isDistributionPossible && (
@@ -366,14 +382,14 @@ const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }>
                             description={`Текущие настройки ролей позволяют назначить не более ${humanSlots} человек(а) и не более ${aiSlots} ИИ. Измените количество игроков или настройки ролей.`}
                             type="error"
                             showIcon
-                            style={{marginBottom: 16}}
+                            style={{ marginBottom: 16 }}
                         />
                     )}
                 </Col>
             </Row>
 
-            <Row justify="center" style={{marginTop: 32}}>
-                <Button type="primary" size="large" onClick={handleStart} disabled={!isValid} icon={<PlusOutlined/>}>
+            <Row justify="center" style={{ marginTop: 32 }}>
+                <Button type="primary" size="large" onClick={handleStart} disabled={!isValid} icon={<PlusOutlined />}>
                     Старт игры
                 </Button>
             </Row>
