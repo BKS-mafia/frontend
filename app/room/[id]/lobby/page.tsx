@@ -26,12 +26,12 @@ const mockInitialPlayers: Player[] = [
     { id: '2', name: 'Мария', avatar: null },
 ];
 
-const MAX_PLAYERS = 111;
+const MAX_PLAYERS = 10;
 //===========================
 
 
 export default function LobbyPage() {
-    
+
     const [players, setPlayers] = useState<Player[]>(mockInitialPlayers);
 
     // Имитация постепенного подключения игроков
