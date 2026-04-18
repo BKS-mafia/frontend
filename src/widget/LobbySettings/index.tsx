@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     Card,
     InputNumber,
@@ -21,10 +22,10 @@ const { Title, Text } = Typography;
 
 interface RoleConfig {
     name: string;
-    count: number;        // для "Мирный" будет вычисляться, не редактируется
+    count: number;
     canBeHuman: boolean;
     canBeAI: boolean;
-    isAuto?: boolean;     // флаг, что роль вычисляется автоматически
+    isAuto?: boolean;
 }
 
 export interface GameSettingsDTO {
@@ -40,11 +41,12 @@ export interface GameSettingsDTO {
 }
 
 const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }> = ({ onStart }) => {
+    const router = useRouter();
+
     const [totalPlayers, setTotalPlayers] = useState<number>(8);
     const [peopleCount, setPeopleCount] = useState<number>(5);
     const aiCount = totalPlayers - peopleCount;
 
-    // Роли: у мирного count будет пересчитываться, поэтому начальное значение неважно
     const [roles, setRoles] = useState<RoleConfig[]>([
         { name: 'Мирный', count: 4, canBeHuman: true, canBeAI: true, isAuto: true },
         { name: 'Мафия', count: 2, canBeHuman: true, canBeAI: true },
@@ -52,21 +54,63 @@ const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }>
         { name: 'Доктор', count: 1, canBeHuman: true, canBeAI: true },
     ]);
 
-    // Вычисляем сумму всех ролей, кроме мирного
     const sumOtherRoles = useMemo(() => {
         return roles
             .filter(r => r.name !== 'Мирный')
             .reduce((sum, r) => sum + r.count, 0);
     }, [roles]);
 
-    // Автоматическое количество мирных
     const autoPeaceCount = totalPlayers - sumOtherRoles;
     const isValidRoles = autoPeaceCount >= 0 && sumOtherRoles <= totalPlayers;
 
-    // Обновляем count у мирного в состоянии для корректного отображения (но пользователь не редактирует)
-    // Чтобы данные в DTO были актуальными, при формировании settings будем подставлять autoPeaceCount.
-    // Для единообразия можно обновлять состояние при каждом изменении зависимостей.
-    React.useEffect(() => {
+    const humanSlots = useMemo(() => {
+        return roles.reduce((sum, role) => {
+            let cnt = role.name === 'Мирный' ? autoPeaceCount : role.count;
+            if (cnt < 0) cnt = 0;
+            return sum + (role.canBeHuman ? cnt : 0);
+        }, 0);
+    }, [roles, autoPeaceCount]);
+
+    const aiSlots = useMemo(() => {
+        return roles.reduce((sum, role) => {
+            let cnt = role.name === 'Мирный' ? autoPeaceCount : role.count;
+            if (cnt < 0) cnt = 0;
+            return sum + (role.canBeAI ? cnt : 0);
+        }, 0);
+    }, [roles, autoPeaceCount]);
+
+    const minPeople = useMemo(() => {
+        const rawMin = totalPlayers - aiSlots;
+        return Math.max(1, rawMin);
+    }, [totalPlayers, aiSlots]);
+
+    const maxPeople = useMemo(() => Math.min(totalPlayers, humanSlots), [totalPlayers, humanSlots]);
+
+    const isDistributionPossible = minPeople <= maxPeople;
+    const isRoleFlagsValid = useMemo(() => {
+        for (const role of roles) {
+            let count = role.name === 'Мирный' ? autoPeaceCount : role.count;
+            if (count > 0 && !role.canBeHuman && !role.canBeAI) {
+                return false;
+            }
+        }
+        return true;
+    }, [roles, autoPeaceCount]);
+
+    const isValid = isValidRoles && isDistributionPossible && isRoleFlagsValid;
+
+    useEffect(() => {
+        if (isDistributionPossible) {
+            let newPeopleCount = peopleCount;
+            if (newPeopleCount < minPeople) newPeopleCount = minPeople;
+            if (newPeopleCount > maxPeople) newPeopleCount = maxPeople;
+            if (newPeopleCount !== peopleCount) {
+                setPeopleCount(newPeopleCount);
+            }
+        }
+    }, [minPeople, maxPeople, peopleCount, isDistributionPossible]);
+
+    useEffect(() => {
         setRoles(prev => prev.map(role =>
             role.name === 'Мирный'
                 ? { ...role, count: autoPeaceCount >= 0 ? autoPeaceCount : 0 }
@@ -74,58 +118,52 @@ const LobbySettings: React.FC<{ onStart?: (settings: GameSettingsDTO) => void }>
         ));
     }, [autoPeaceCount]);
 
-
-function canDistributeRoles(newRoles: {
-        name: string;
-        count: number;
-        canBeHuman: boolean;
-        canBeAI: boolean;
-        isAuto?: boolean;
-    }[],): boolean {
-    const humanSlots = newRoles.reduce(
-        (sum, role) => sum + (role.canBeHuman ? role.count : 0),
-        0
-    );
-    const aiSlots = newRoles.reduce(
-        (sum, role) => sum + (role.canBeAI ? role.count : 0),
-        0
-    );
-    return peopleCount <= humanSlots && aiCount <= aiSlots;
-}
-
     const handleTotalPlayersChange = (value: number | null) => {
         const newTotal = value ?? 8;
+        if (newTotal < sumOtherRoles) return;
         setTotalPlayers(newTotal);
         if (peopleCount > newTotal) setPeopleCount(newTotal);
     };
 
     const handlePeopleSliderChange = (value: number) => {
-        setPeopleCount(value);
+        let newValue = value;
+        if (newValue < minPeople) newValue = minPeople;
+        if (newValue > maxPeople) newValue = maxPeople;
+        setPeopleCount(newValue);
     };
 
     const updateRoleCount = (index: number, newCount: number) => {
+        const role = roles[index];
+        if (role.name === 'Мирный') return;
+
+        const newSum = sumOtherRoles - role.count + newCount;
+        if (newSum > totalPlayers) return;
 
         const updated = [...roles];
-        // Запрещаем менять count у мирного
-        if (updated[index].name === 'Мирный') return;
-
         updated[index].count = Math.max(0, newCount);
-        // if (!canDistributeRoles(updated)) return;
-        setRoles(updated);
 
+        if (updated[index].count > 0 && !updated[index].canBeHuman && !updated[index].canBeAI) {
+            updated[index].canBeHuman = true;
+        }
+
+        setRoles(updated);
     };
 
     const updateRoleFlag = (index: number, field: 'canBeHuman' | 'canBeAI', value: boolean) => {
-        
+        const role = roles[index];
+        const count = role.name === 'Мирный' ? autoPeaceCount : role.count;
+
+        if (count > 0 && !value && !role[field === 'canBeHuman' ? 'canBeAI' : 'canBeHuman']) {
+            return;
+        }
+
         const updated = [...roles];
         updated[index][field] = value;
-        // if (!canDistributeRoles(updated)) return;
         setRoles(updated);
-
     };
 
     const handleStart = () => {
-        if (!isValidRoles) return;
+        if (!isValid) return;
         const settings: GameSettingsDTO = {
             totalPlayers,
             peopleCount,
@@ -137,12 +175,11 @@ function canDistributeRoles(newRoles: {
                 canBeAI: r.canBeAI,
             })),
         };
-        // console.log('Game Settings DTO:', settings);
+        const id: number = 6;
+        router.push(`/room/${id}`);
         if (onStart) onStart(settings);
     };
 
-
-    // Колонки таблицы
     const columns: ColumnsType<RoleConfig & { index: number }> = [
         {
             title: 'Роль',
@@ -157,19 +194,12 @@ function canDistributeRoles(newRoles: {
             width: 120,
             render: (count: number, record: any) => {
                 if (record.name === 'Мирный') {
-                    // Отображаем вычисленное значение, disabled
-                    return (
-                        <InputNumber
-                            value={autoPeaceCount}
-                            disabled
-                            style={{ width: '100%' }}
-                        />
-                    );
+                    return <InputNumber value={autoPeaceCount} disabled style={{ width: '100%' }} />;
                 }
                 return (
                     <InputNumber
                         min={0}
-                        max={count + autoPeaceCount}
+                        max={totalPlayers - (sumOtherRoles - record.count)}
                         value={count}
                         onChange={(val) => updateRoleCount(record.index, Math.trunc(val ?? 0))}
                         style={{ width: '100%' }}
@@ -184,12 +214,7 @@ function canDistributeRoles(newRoles: {
             align: 'center',
             width: 150,
             render: (checked: boolean, record: any) => (
-                <Checkbox
-                    checked={checked}
-                    onChange={(e) => {
-                        updateRoleFlag(record.index, 'canBeHuman', e.target.checked)
-                    }}
-                />
+                <Checkbox checked={checked} onChange={(e) => updateRoleFlag(record.index, 'canBeHuman', e.target.checked)} />
             ),
         },
         {
@@ -199,32 +224,28 @@ function canDistributeRoles(newRoles: {
             align: 'center',
             width: 150,
             render: (checked: boolean, record: any) => (
-                <Checkbox
-                    checked={checked}
-                    onChange={(e) => updateRoleFlag(record.index, 'canBeAI', e.target.checked)}
-                />
+                <Checkbox checked={checked} onChange={(e) => updateRoleFlag(record.index, 'canBeAI', e.target.checked)} />
             ),
         },
     ];
 
     const tableData = roles.map((role, idx) => ({ ...role, index: idx, key: idx }));
 
+    const startPercent = ((minPeople - 1) / (totalPlayers - 1)) * 100;
+    const endPercent = ((maxPeople - 1) / (totalPlayers - 1)) * 100;
+    const railGradient = `linear-gradient(to right, 
+        #ffffff 0%, #d9d9d9 ${startPercent}%, 
+        #7c7c7c ${startPercent}%, #000000 ${endPercent}%, 
+        #d9d9d9 ${endPercent}%, #ffffff 100%)`;
+
     return (
         <Card style={{ maxWidth: 900, margin: '2rem auto' }}>
-            <Title level={3} style={{ textAlign: 'center' }}>
-                Настройки игры
-            </Title>
+            <Title level={3} style={{ textAlign: 'center' }}>Настройки игры</Title>
 
             <Row gutter={[16, 16]} align="middle">
                 <Col span={8}><Text strong>Общее число игроков:</Text></Col>
                 <Col span={8}>
-                    <InputNumber
-                        min={4}
-                        max={20}
-                        value={totalPlayers}
-                        onChange={handleTotalPlayersChange}
-                        style={{ width: '100%' }}
-                    />
+                    <InputNumber min={4} max={20} value={totalPlayers} onChange={handleTotalPlayersChange} style={{ width: '100%' }} />
                 </Col>
                 <Col span={8}><Text type="secondary">от 4 до 20</Text></Col>
             </Row>
@@ -236,18 +257,60 @@ function canDistributeRoles(newRoles: {
                             <span><UserOutlined /> Люди: {peopleCount}</span>
                             <span><RobotOutlined /> ИИ: {aiCount}</span>
                         </div>
-                        <Slider
-                            min={1}
-                            max={totalPlayers}
-                            step={1}
-                            value={peopleCount}
-                            onChange={handlePeopleSliderChange}
-                            tooltip={{ formatter: (val) => `${val}` }}
-                        />
+                        <div className="custom-slider-wrapper" style={{ position: 'relative', marginBottom: 8 }}>
+                            <Slider
+                                min={1}
+                                max={totalPlayers}
+                                step={1}
+                                value={peopleCount}
+                                onChange={handlePeopleSliderChange}
+                                tooltip={{ formatter: (val) => `${val}` }}
+                            />
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    height: '100%',
+                                    pointerEvents: 'none',
+                                    zIndex: 0,
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        left: 0,
+                                        right: 0,
+                                        height: 4,
+                                        borderRadius: 2,
+                                        background: railGradient,
+                                    }}
+                                />
+                            </div>
+                            <style jsx>{`
+                                .custom-slider-wrapper :global(.ant-slider-rail) {
+                                    background: transparent !important;
+                                }
+                                .custom-slider-wrapper :global(.ant-slider-track) {
+                                    background: transparent !important;
+                                }
+                                .custom-slider-wrapper :global(.ant-slider-step) {
+                                    background: transparent;
+                                }
+                            `}</style>
+                        </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <Text type="secondary">1</Text>
                             <Text type="secondary">{totalPlayers}</Text>
                         </div>
+                        {!isDistributionPossible && (
+                            <Text type="danger" style={{ fontSize: 12 }}>
+                                Невозможно распределить людей и ИИ. Измените настройки ролей.
+                            </Text>
+                        )}
                     </Space>
                 </Col>
             </Row>
@@ -255,19 +318,13 @@ function canDistributeRoles(newRoles: {
             <Row style={{ marginTop: 32 }}>
                 <Col span={24}>
                     <Title level={4}>Роли</Title>
-                    <Table
-                        columns={columns}
-                        dataSource={tableData}
-                        pagination={false}
-                        size="middle"
-                        bordered
-                    />
+                    <Table columns={columns} dataSource={tableData} pagination={false} size="middle" bordered />
                 </Col>
             </Row>
 
             <Row style={{ marginTop: 24 }}>
                 <Col span={24}>
-                    {!isValidRoles && ( 
+                    {!isValidRoles && (
                         <Alert
                             message="Ошибка количества ролей"
                             description={`Сумма ролей (мафия + комиссар + доктор) = ${sumOtherRoles} не должна превышать общее число игроков (${totalPlayers})`}
@@ -284,17 +341,29 @@ function canDistributeRoles(newRoles: {
                             showIcon
                         />
                     )}
+                    {!isRoleFlagsValid && (
+                        <Alert
+                            message="Некорректные настройки ролей"
+                            description="Каждая роль с ненулевым количеством должна иметь возможность быть человеком или ИИ."
+                            type="error"
+                            showIcon
+                            style={{ marginBottom: 16 }}
+                        />
+                    )}
+                    {!isDistributionPossible && (
+                        <Alert
+                            message="Невозможно распределить людей и ИИ"
+                            description={`Текущие настройки ролей позволяют назначить не более ${humanSlots} человек(а) и не более ${aiSlots} ИИ. Измените количество игроков или настройки ролей.`}
+                            type="error"
+                            showIcon
+                            style={{ marginBottom: 16 }}
+                        />
+                    )}
                 </Col>
             </Row>
 
             <Row justify="center" style={{ marginTop: 32 }}>
-                <Button
-                    type="primary"
-                    size="large"
-                    onClick={handleStart}
-                    disabled={!isValidRoles}
-                    icon={<PlusOutlined />}
-                >
+                <Button type="primary" size="large" onClick={handleStart} disabled={!isValid} icon={<PlusOutlined />}>
                     Старт игры
                 </Button>
             </Row>
