@@ -6,9 +6,7 @@
         Input,
         Avatar,
         Typography,
-        Form,
         Button,
-        Switch,
         Divider,
         Badge,
         ConfigProvider,
@@ -16,12 +14,8 @@
     } from 'antd';
     import {
         UserOutlined,
-        SettingOutlined,
         MessageOutlined,
         SearchOutlined,
-        LockOutlined,
-        PhoneOutlined,
-        MailOutlined,
         TeamOutlined,
         SendOutlined,
     } from '@ant-design/icons';
