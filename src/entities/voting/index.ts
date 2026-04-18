@@ -1,2 +1,2 @@
-export { VotingPoll } from './ui/VotingPoll';
-export type { VotingOption } from './ui/VotingPoll';
+export { VotingMessageComponent } from './ui/VotingMessage';
+export type { VotingMessage } from './model/types';
