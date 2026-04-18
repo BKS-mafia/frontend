@@ -1,196 +1,228 @@
-    
-    import { useParams } from 'next/navigation'
-    import React, { useState, useRef, useEffect } from 'react';
-    import {
-        Layout,
-        Input,
-        Avatar,
-        Typography,
-        Button,
-        Divider,
-        Badge,
-        ConfigProvider,
-        Empty,
-    } from 'antd';
-    import {
-        UserOutlined,
-        MessageOutlined,
-        SearchOutlined,
-        TeamOutlined,
-        SendOutlined,
-    } from '@ant-design/icons';
-    
-    const { Sider, Content } = Layout;
-    const { Text, Title } = Typography;
-    
-    // ==================== DTO / Типы данных с сервера ====================
-    
-    import MessageDTO from "@/src/shared/MessageDTO"
-    import ChatDTO from "@/src/shared/ChatDTO"
+// src/widget/TelegramClone/index.tsx
 
+"use client";
 
-    const CURRENT_USER_ID = 'user-1';
-    
-    // ==================== Моковые данные ====================
-    const mockChats: ChatDTO[] = [
+import { useParams } from 'next/navigation';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import {
+    Layout,
+    Input,
+    Avatar,
+    Typography,
+    Button,
+    Divider,
+    Badge,
+    ConfigProvider,
+    Empty,
+    Card,
+    Radio,
+    Space,
+} from 'antd';
+import {
+    UserOutlined,
+    MessageOutlined,
+    SearchOutlined,
+    TeamOutlined,
+    SendOutlined,
+    LockOutlined,
+} from '@ant-design/icons';
+
+import { ChatMessage, SystemNotification } from '@/src/entities/chat';
+import type { ChatMessage as ChatMessageType } from '@/src/entities/chat/model/types';
+import type { SystemNotification as SystemNotificationType } from '@/src/entities/chat/model/types';
+
+const { Sider, Content } = Layout;
+const { Text } = Typography;
+
+// ==================== Константы ====================
+const CURRENT_USER_ID = 'user-1';
+const CURRENT_USER_NAME = 'Алексей';
+
+// ==================== Тип для голосования ====================
+interface VotingMessage {
+    id: string;
+    type: 'voting';
+    title: string;
+    options: { userId: string; userName: string }[];
+    chatId: string;
+}
+
+// Тип чата
+interface Chat {
+    id: string;
+    name: string;
+    type: 'general' | 'mafia' | 'commissioner' | 'private';
+    icon?: React.ReactNode;
+    lastMessage?: string;
+    lastMessageTime?: string;
+    unread?: number;
+}
+
+// ==================== Моковые данные ====================
+const mockPlayers = [
+    { userId: 'user-1', userName: 'Алексей (Вы)' },
+    { userId: 'user-2', userName: 'Мафия Игорь' },
+    { userId: 'user-3', userName: 'Комиссар Анна' },
+    { userId: 'user-4', userName: 'Мирный Дмитрий' },
+    { userId: 'user-5', userName: 'Доктор Елена' },
+    { userId: 'ai-1', userName: '🤖 AI-Мафия' },
+    { userId: 'ai-2', userName: '🤖 AI-Мирный' },
+    { userId: 'ai-3', userName: '🤖 AI-Комиссар' },
+];
+
+const mockChats: Chat[] = [
+    { id: 'general', name: 'Общий чат', type: 'general', icon: <TeamOutlined />, lastMessage: 'Голосуем!', lastMessageTime: '12:34', unread: 2 },
+    { id: 'mafia', name: 'Шёпот мафии', type: 'mafia', icon: <LockOutlined />, lastMessage: 'Убиваем Анну?', lastMessageTime: '12:30', unread: 1 },
+    { id: 'commissioner', name: 'Комиссар', type: 'commissioner', icon: <UserOutlined />, lastMessage: 'Проверь Игоря', lastMessageTime: '12:28', unread: 0 },
+];
+
+const messagesByChat: Record<string, ChatMessageType[]> = {
+    general: [
+        { id: 'g1', userId: 'user-2', userName: 'Мафия Игорь', text: 'Всем привет!', timestamp: Date.now() - 3600000, isOwn: false },
+        { id: 'g2', userId: CURRENT_USER_ID, userName: CURRENT_USER_NAME, text: 'Привет! Как игра?', timestamp: Date.now() - 3500000, isOwn: true },
+        { id: 'g3', userId: 'ai-1', userName: '🤖 AI-Мафия', text: 'Я думаю, что Мирные должны объединиться', timestamp: Date.now() - 3400000, isOwn: false },
+    ],
+    mafia: [
+        { id: 'm1', userId: 'user-2', userName: 'Мафия Игорь', text: 'Кого убираем?', timestamp: Date.now() - 2000000, isOwn: false },
+        { id: 'm2', userId: 'ai-1', userName: '🤖 AI-Мафия', text: 'Предлагаю Анну', timestamp: Date.now() - 1900000, isOwn: false },
+    ],
+    commissioner: [
+        { id: 'c1', userId: 'user-3', userName: 'Комиссар Анна', text: 'Проверил Игоря — он мафия', timestamp: Date.now() - 1500000, isOwn: false },
+    ],
+};
+
+const notificationsByChat: Record<string, SystemNotificationType[]> = {
+    general: [
+        { id: 's1', type: 'join', message: 'Алексей присоединился к комнате', timestamp: Date.now() - 7200000 },
+        { id: 's2', type: 'phase_change', message: '🌙 Началась ночь. Мафия просыпается', timestamp: Date.now() - 6000000 },
+        { id: 's3', type: 'phase_change', message: '☀️ Наступил день. Общее голосование!', timestamp: Date.now() - 4000000 },
+    ],
+    mafia: [
+        { id: 'sm1', type: 'phase_change', message: '🔪 Мафия, выберите жертву', timestamp: Date.now() - 5000000 },
+    ],
+    commissioner: [
+        { id: 'sc1', type: 'phase_change', message: '🕵️ Комиссар, ваш ход', timestamp: Date.now() - 4500000 },
+    ],
+};
+
+const votingMessagesByChat: Record<string, VotingMessage[]> = {
+    general: [
         {
-            id: 1,
-            name: 'Иван Петров',
-            lastMessage: 'Привет, как дела?',
-            lastMessageTime: '12:34',
-            unread: 2,
-            avatar: null,
-            online: true,
+            id: 'v1',
+            type: 'voting',
+            title: 'Кого исключить из игры?',
+            options: mockPlayers.filter(p => p.userId !== CURRENT_USER_ID),
+            chatId: 'general',
         },
-        {
-            id: 2,
-            name: 'Рабочая группа',
-            lastMessage: 'Дедлайн завтра в 18:00',
-            lastMessageTime: '09:15',
-            unread: 0,
-            avatar: null,
-            online: false,
-            isGroup: true,
-        },
-        {
-            id: 3,
-            name: 'Анна Смирнова',
-            lastMessage: 'Отправила файлы по проекту',
-            lastMessageTime: 'Вчера',
-            unread: 1,
-            avatar: null,
-            online: true,
-        },
-    ];
-    
-    const mockMessages: Record<number, MessageDTO[]> = {
-        1: [
-            {
-                id: 'm1',
-                chatId: 1,
-                senderId: 'user-2',
-                text: 'Привет! Как твои дела?',
-                timestamp: '12:30',
-                isOwn: false,
-            },
-            {
-                id: 'm2',
-                chatId: 1,
-                senderId: CURRENT_USER_ID,
-                text: 'Привет! Всё отлично, работаю над проектом',
-                timestamp: '12:32',
-                isOwn: true,
-            },
-            {
-                id: 'm3',
-                chatId: 1,
-                senderId: 'user-2',
-                text: 'Здорово! Когда покажешь результат?',
-                timestamp: '12:33',
-                isOwn: false,
-            },
-            {
-                id: 'm4',
-                chatId: 1,
-                senderId: CURRENT_USER_ID,
-                text: 'Думаю, к вечеру будет что показать',
-                timestamp: '12:34',
-                isOwn: true,
-            },
-        ],
-        2: [
-            {
-                id: 'm5',
-                chatId: 2,
-                senderId: 'user-3',
-                text: 'Коллеги, напоминаю про дедлайн',
-                timestamp: '09:00',
-                isOwn: false,
-            },
-            {
-                id: 'm6',
-                chatId: 2,
-                senderId: CURRENT_USER_ID,
-                text: 'Понял, успеваю',
-                timestamp: '09:15',
-                isOwn: true,
-            },
-        ],
-        3: [
-            {
-                id: 'm7',
-                chatId: 3,
-                senderId: 'user-4',
-                text: 'Привет, скинула файлы в облако',
-                timestamp: 'Вчера',
-                isOwn: false,
-            },
-            {
-                id: 'm8',
-                chatId: 3,
-                senderId: CURRENT_USER_ID,
-                text: 'Спасибо, посмотрю',
-                timestamp: 'Вчера',
-                isOwn: true,
-            },
-        ],
+    ],
+    mafia: [],
+    commissioner: [],
+};
+
+// ==================== Компонент голосования (без таймера) ====================
+const VotingMessageComponent: React.FC<{
+    voting: VotingMessage;
+    onVote: (selectedUserId: string, votingId: string) => void;
+    disabled: boolean;
+}> = ({ voting, onVote, disabled }) => {
+    const [selected, setSelected] = useState<string | null>(null);
+
+    const handleSubmit = () => {
+        if (selected) {
+            onVote(selected, voting.id);
+        }
     };
-    
-    
-    
-const TelegramClone: React.FC = () => {
-    const params = useParams(); 
-    const roomId = params.id;
-    console.log(roomId)
 
-    const [chats, setChats] = useState<ChatDTO[]>(mockChats);
-    const [messages, setMessages] = useState<Record<number, MessageDTO[]>>(mockMessages);
-    const [selectedChatId, setSelectedChatId] = useState<number | null>(1);
+    return (
+        <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 16 }}>
+            <div style={{ maxWidth: '70%' }}>
+                <div
+                    style={{
+                        backgroundColor: '#ffffff',
+                        borderRadius: 18,
+                        padding: '10px 14px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                        border: '1px solid #e2e8f0',
+                    }}
+                >
+                    <Text strong style={{ fontSize: 13, color: '#64748b', display: 'block', marginBottom: 8 }}>
+                        🎭 Ведущий
+                    </Text>
+                    <div style={{ fontWeight: 500, marginBottom: 12 }}>{voting.title}</div>
+                    <Radio.Group onChange={(e) => setSelected(e.target.value)} value={selected} disabled={disabled} style={{ width: '100%', marginBottom: 12 }}>
+                        <Space orientation="vertical" style={{ width: '100%' }}>
+                            {voting.options.map(opt => (
+                                <Radio key={opt.userId} value={opt.userId}>
+                                    <Avatar size={24} icon={<UserOutlined />} style={{ marginRight: 8 }} />
+                                    {opt.userName}
+                                </Radio>
+                            ))}
+                        </Space>
+                    </Radio.Group>
+                    <Button
+                        type="primary"
+                        size="small"
+                        block
+                        onClick={handleSubmit}
+                        disabled={!selected || disabled}
+                    >
+                        Проголосовать
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ==================== Основной компонент ====================
+const TelegramClone: React.FC = () => {
+    const params = useParams();
+    const roomId = params.id;
+
+    const [chats, setChats] = useState<Chat[]>(mockChats);
+    const [selectedChatId, setSelectedChatId] = useState<string>('general');
     const [searchQuery, setSearchQuery] = useState('');
     const [newMessageText, setNewMessageText] = useState('');
-
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const filteredChats = chats.filter((chat) =>
-        chat.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const messages = messagesByChat[selectedChatId] || [];
+    const notifications = notificationsByChat[selectedChatId] || [];
+    const [votingMessages, setVotingMessages] = useState<VotingMessage[]>(votingMessagesByChat[selectedChatId] || []);
 
-    const selectedChat = chats.find((c) => c.id === selectedChatId);
-    const currentMessages = selectedChatId ? messages[selectedChatId] || [] : [];
+    // При смене чата обновляем голосования
+    useEffect(() => {
+        setVotingMessages(votingMessagesByChat[selectedChatId] || []);
+    }, [selectedChatId]);
+
+    const allItems = useMemo(() => {
+        const items: (ChatMessageType | SystemNotificationType | { type: 'voting'; data: VotingMessage })[] = [
+            ...messages,
+            ...notifications,
+            ...votingMessages.map(vm => ({ type: 'voting' as const, data: vm })),
+        ];
+        return items.sort((a, b) => a.timestamp - b.timestamp);
+    }, [messages, notifications, votingMessages]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [currentMessages]);
+    }, [allItems]);
 
     const handleSendMessage = () => {
-        if (!newMessageText.trim() || !selectedChatId) return;
-
-        const newMessage: MessageDTO = {
-            id: `m${Date.now()}`,
-            chatId: selectedChatId,
-            senderId: CURRENT_USER_ID,
+        if (!newMessageText.trim()) return;
+        const newMessage: ChatMessageType = {
+            id: `msg-${Date.now()}`,
+            userId: CURRENT_USER_ID,
+            userName: CURRENT_USER_NAME,
             text: newMessageText.trim(),
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            timestamp: Date.now(),
             isOwn: true,
         };
-
-        setMessages((prev) => ({
-            ...prev,
-            [selectedChatId]: [...(prev[selectedChatId] || []), newMessage],
-        }));
-
-        setChats((prev) =>
-            prev.map((chat) =>
-                chat.id === selectedChatId
-                    ? {
-                          ...chat,
-                          lastMessage: newMessage.text,
-                          lastMessageTime: newMessage.timestamp,
-                      }
-                    : chat
-            )
-        );
-
+        messagesByChat[selectedChatId] = [...messages, newMessage];
+        setChats(prev => prev.map(chat =>
+            chat.id === selectedChatId
+                ? { ...chat, lastMessage: newMessage.text, lastMessageTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+                : chat
+        ));
         setNewMessageText('');
     };
 
@@ -201,296 +233,120 @@ const TelegramClone: React.FC = () => {
         }
     };
 
-    const handleSelectChat = (chatId: number) => {
-        setSelectedChatId(chatId);
+    const handleVote = useCallback((selectedUserId: string, votingId: string) => {
+        // Удаляем это голосование из чата
+        setVotingMessages(prev => prev.filter(vm => vm.id !== votingId));
+        const votedPlayer = mockPlayers.find(p => p.userId === selectedUserId);
+        if (votedPlayer) {
+            const notif: SystemNotificationType = {
+                id: `vote-result-${Date.now()}`,
+                type: 'phase_change',
+                message: `🗳️ Вы проголосовали за ${votedPlayer.userName}`,
+                timestamp: Date.now(),
+            };
+            notificationsByChat[selectedChatId] = [...notifications, notif];
+            // Обновляем состояние уведомлений для ререндера
+            // В реальном приложении лучше использовать общее состояние, но для моков достаточно
+        }
+    }, [selectedChatId, notifications]);
+
+    const filteredChats = chats.filter(chat =>
+        chat.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const renderItem = (item: any) => {
+        if (item.type === 'voting') {
+            return (
+                <VotingMessageComponent
+                    key={item.data.id}
+                    voting={item.data}
+                    onVote={handleVote}
+                    disabled={false}
+                />
+            );
+        }
+        if ('type' in item && (item.type === 'join' || item.type === 'leave' || item.type === 'role_assigned' || item.type === 'phase_change')) {
+            return <SystemNotification key={item.id} notification={item} />;
+        }
+        return <ChatMessage key={item.id} message={item} />;
     };
 
-    // ==================== Рендер областей ====================
     const renderChatArea = () => (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            {/* Шапка чата */}
-            <div
-                style={{
-                    padding: '12px 20px',
-                    borderBottom: '1px solid #e5e5e5',
-                    display: 'flex',
-                    alignItems: 'center',
-                    backgroundColor: '#ffffff',
-                }}
-            >
-                {selectedChat ? (
-                    <>
-                        <Avatar
-                            size={40}
-                            icon={selectedChat.isGroup ? <TeamOutlined /> : <UserOutlined />}
-                            src={selectedChat.avatar}
-                        />
-                        <div style={{ marginLeft: 12, flex: 1 }}>
-                            <div style={{ fontWeight: 500, fontSize: 16, color: '#1e293b' }}>
-                                {selectedChat.name}
-                            </div>
-                            <Text type="secondary" style={{ fontSize: 13, color: '#64748b' }}>
-                                {selectedChat.online ? 'онлайн' : 'был(а) недавно'}
-                            </Text>
-                        </div>
-                    </>
-                ) : (
-                    <Text type="secondary" style={{ color: '#64748b' }}>
-                        Выберите чат
-                    </Text>
-                )}
-            </div>
-
-            {/* Область сообщений */}
-            <div
-                style={{
-                    flex: 1,
-                    padding: '16px 20px',
-                    overflowY: 'auto',
-                    backgroundColor: '#f9fafb',
-                    backgroundImage:
-                        'radial-gradient(circle at 1px 1px, #e2e8f0 1px, transparent 1px)',
-                    backgroundSize: '20px 20px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                }}
-            >
-                {currentMessages.length === 0 ? (
-                    <div
-                        style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            height: '100%',
-                            color: '#94a3b8',
-                        }}
-                    >
-                        <MessageOutlined style={{ fontSize: 48, opacity: 0.5, marginBottom: 16 }} />
-                        <Text style={{ color: '#64748b' }}>Нет сообщений. Напишите первым!</Text>
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid #e5e5e5', backgroundColor: '#fff' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <Avatar size={40} icon={chats.find(c => c.id === selectedChatId)?.icon || <TeamOutlined />} style={{ backgroundColor: '#3b82f6' }} />
+                    <div style={{ marginLeft: 12 }}>
+                        <div style={{ fontWeight: 500, fontSize: 16 }}>{chats.find(c => c.id === selectedChatId)?.name}</div>
+                        <Text type="secondary" style={{ fontSize: 13 }}>Комната #{roomId}</Text>
                     </div>
-                ) : (
-                    currentMessages.map((msg) => (
-                        <div
-                            key={msg.id}
-                            style={{
-                                display: 'flex',
-                                justifyContent: msg.isOwn ? 'flex-end' : 'flex-start',
-                                marginBottom: 12,
-                            }}
-                        >
-                            {!msg.isOwn && (
-                                <Avatar
-                                    size={32}
-                                    icon={<UserOutlined />}
-                                    style={{ marginRight: 8, flexShrink: 0 }}
-                                />
-                            )}
-                            <div
-                                style={{
-                                    maxWidth: '70%',
-                                    padding: '10px 14px',
-                                    borderRadius: 18,
-                                    backgroundColor: msg.isOwn ? '#3b82f6' : '#ffffff',
-                                    color: msg.isOwn ? '#ffffff' : '#1e293b',
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                    wordBreak: 'break-word',
-                                    border: msg.isOwn ? 'none' : '1px solid #e2e8f0',
-                                }}
-                            >
-                                <div style={{ fontSize: 14, lineHeight: 1.5 }}>{msg.text}</div>
-                                <div
-                                    style={{
-                                        fontSize: 11,
-                                        marginTop: 4,
-                                        textAlign: 'right',
-                                        opacity: 0.7,
-                                        color: msg.isOwn ? '#ffffff' : '#64748b',
-                                    }}
-                                >
-                                    {msg.timestamp}
-                                </div>
-                            </div>
-                            {msg.isOwn && (
-                                <Avatar
-                                    size={32}
-                                    icon={<UserOutlined />}
-                                    style={{ marginLeft: 8, flexShrink: 0 }}
-                                />
-                            )}
-                        </div>
-                    ))
-                )}
+                </div>
+            </div>
+            <div style={{ flex: 1, padding: '16px 20px', overflowY: 'auto', backgroundColor: '#f9fafb' }}>
+                {allItems.length === 0 ? <Empty description="Нет сообщений" /> : allItems.map((item, idx) => renderItem(item))}
                 <div ref={messagesEndRef} />
             </div>
-
-            {/* Поле ввода */}
-            <div
-                style={{
-                    padding: '12px 20px',
-                    borderTop: '1px solid #e5e5e5',
-                    backgroundColor: '#ffffff',
-                }}
-            >
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e5e5', backgroundColor: '#fff' }}>
                 <div style={{ display: 'flex', gap: 8 }}>
                     <Input
                         placeholder="Написать сообщение..."
                         value={newMessageText}
                         onChange={(e) => setNewMessageText(e.target.value)}
                         onKeyPress={handleKeyPress}
-                        style={{ borderRadius: 20 }}
                         size="large"
                     />
-                    <Button
-                        type="primary"
-                        icon={<SendOutlined />}
-                        onClick={handleSendMessage}
-                        style={{ borderRadius: 20, width: 48 }}
-                        size="large"
-                        disabled={!newMessageText.trim()}
-                    />
+                    <Button type="primary" icon={<SendOutlined />} onClick={handleSendMessage} disabled={!newMessageText.trim()} />
                 </div>
             </div>
         </div>
     );
 
-
     return (
-        <ConfigProvider
-            theme={{
-                token: {
-                    colorPrimary: '#3b82f6',
-                    borderRadius: 8,
-                },
-            }}
-        >
+        <ConfigProvider theme={{ token: { colorPrimary: '#3b82f6' } }}>
             <Layout style={{ height: '100vh' }}>
-                <Sider
-                    width={340}
-                    style={{
-                        backgroundColor: '#ffffff',
-                        borderRight: '1px solid #e5e5e5',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        height: '100vh',
-                    }}
-                >
+                <Sider width={340} style={{ backgroundColor: '#fff', borderRight: '1px solid #e5e5e5' }}>
                     <div style={{ padding: '16px 12px' }}>
-                        <Input
-                            placeholder="Поиск"
-                            prefix={<SearchOutlined style={{ color: '#a0a0a0' }} />}
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            style={{ borderRadius: 20, backgroundColor: '#f5f5f5', border: 'none' }}
-                            size="large"
-                        />
+                        <Input placeholder="Поиск чатов" prefix={<MessageOutlined />} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                     </div>
-                    <Divider style={{ margin: '12px 0 0' }} />
-
+                    <Divider style={{ margin: 0 }} />
                     <div style={{ flex: 1, overflowY: 'auto', padding: '4px' }}>
-                        {filteredChats.length === 0 ? (
-                            <Empty description="Чаты не найдены" style={{ marginTop: 40 }} />
-                        ) : (
-                            filteredChats.map((chat) => (
-                                <div
-                                    key={chat.id}
-                                    onClick={() => handleSelectChat(chat.id)}
-                                    style={{
-                                        padding: '10px 12px',
-                                        cursor: 'pointer',
-                                        borderRadius: 12,
-                                        margin: '2px 4px',
-                                        backgroundColor:
-                                            selectedChatId === chat.id ? '#f0f7ff' : 'transparent',
-                                        transition: 'background-color 0.2s',
-                                    }}
-                                    onMouseEnter={(e) => {
-                                        if (selectedChatId !== chat.id) {
-                                            e.currentTarget.style.backgroundColor = '#f5f5f5';
-                                        }
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        if (selectedChatId !== chat.id) {
-                                            e.currentTarget.style.backgroundColor = 'transparent';
-                                        }
-                                    }}
-                                >
-                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                        <Badge dot={chat.online} color="#22c55e" offset={[-4, 36]}>
-                                            <Avatar
-                                                size={48}
-                                                icon={chat.isGroup ? <TeamOutlined /> : <UserOutlined />}
-                                                src={chat.avatar}
-                                                style={{
-                                                    backgroundColor: chat.isGroup ? '#3b82f6' : '#64748b',
-                                                }}
-                                            />
-                                        </Badge>
-                                        <div style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
-                                            <div
-                                                style={{
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                }}
-                                            >
-                                                <Text
-                                                    strong={chat.unread > 0}
-                                                    style={{
-                                                        fontSize: 15,
-                                                        fontWeight: chat.unread > 0 ? 600 : 400,
-                                                        color: chat.unread > 0 ? '#1e293b' : '#334155',
-                                                    }}
-                                                >
-                                                    {chat.name}
-                                                </Text>
-                                                <Text style={{ fontSize: 12, color: '#94a3b8' }}>
-                                                    {chat.lastMessageTime}
-                                                </Text>
-                                            </div>
-                                            <div
-                                                style={{
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'center',
-                                                }}
-                                            >
-                                                <Text
-                                                    style={{
-                                                        fontSize: 13,
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis',
-                                                        whiteSpace: 'nowrap',
-                                                        maxWidth: 180,
-                                                        color: chat.unread > 0 ? '#475569' : '#94a3b8',
-                                                    }}
-                                                >
-                                                    {chat.lastMessage}
-                                                </Text>
-                                                {chat.unread > 0 && (
-                                                    <Badge
-                                                        count={chat.unread}
-                                                        style={{
-                                                            backgroundColor: '#3b82f6',
-                                                            fontSize: 12,
-                                                            minWidth: 20,
-                                                            height: 20,
-                                                            lineHeight: '20px',
-                                                            borderRadius: 10,
-                                                        }}
-                                                    />
-                                                )}
-                                            </div>
+                        {filteredChats.map(chat => (
+                            <div
+                                key={chat.id}
+                                onClick={() => setSelectedChatId(chat.id)}
+                                style={{
+                                    padding: '10px 12px',
+                                    cursor: 'pointer',
+                                    borderRadius: 12,
+                                    margin: '2px 4px',
+                                    backgroundColor: selectedChatId === chat.id ? '#f0f7ff' : 'transparent',
+                                    transition: 'background-color 0.2s',
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <Badge dot={chat.unread > 0} color="#3b82f6" offset={[-4, 36]}>
+                                        <Avatar size={48} icon={chat.icon || <UserOutlined />} style={{ backgroundColor: '#64748b' }} />
+                                    </Badge>
+                                    <div style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <Text strong style={{ fontSize: 15, color: '#1e293b' }}>{chat.name}</Text>
+                                            <Text style={{ fontSize: 12, color: '#94a3b8' }}>{chat.lastMessageTime}</Text>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <Text style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180, color: '#64748b' }}>
+                                                {chat.lastMessage}
+                                            </Text>
+                                            {chat.unread > 0 && (
+                                                <Badge count={chat.unread} style={{ backgroundColor: '#3b82f6' }} />
+                                            )}
                                         </div>
                                     </div>
                                 </div>
-                            ))
-                        )}
+                            </div>
+                        ))}
                     </div>
                 </Sider>
-
-                <Content style={{ backgroundColor: '#ffffff', overflow: 'hidden' }}>
-                    {renderChatArea()}
-                </Content>
+                <Content>{renderChatArea()}</Content>
             </Layout>
         </ConfigProvider>
     );
