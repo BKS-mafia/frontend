@@ -6,25 +6,9 @@ import TelegramClone from "@/src/widget/TelegramClone/index";
 
 
 // ==================== DTO / Типы данных с сервера ====================
-interface MessageDTO {
-    id: string;
-    chatId: number;
-    senderId: string;
-    text: string;
-    timestamp: string;
-    isOwn: boolean;
-}
+import MessageDTO from "@/src/shared/MessageDTO"
+import ChatDTO from "@/src/shared/ChatDTO"
 
-interface ChatDTO {
-    id: number;
-    name: string;
-    lastMessage: string;
-    lastMessageTime: string;
-    unread: number;
-    avatar: string | null;
-    online: boolean;
-    isGroup?: boolean;
-}
 
 const CURRENT_USER_ID = 'user-1';
 
