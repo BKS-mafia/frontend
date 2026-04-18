@@ -372,80 +372,103 @@ const TelegramClone: React.FC = () => {
         </div>
     );
 
-    const renderProfile = () => (
-        <div style={{ padding: 32, maxWidth: 600, margin: '0 auto' }}>
-            <Title level={3} style={{ marginBottom: 24, fontWeight: 400, color: '#1e293b' }}>
-                Профиль
-            </Title>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 32 }}>
-                <Avatar size={80} icon={<UserOutlined />} style={{ backgroundColor: '#3b82f6' }} />
-                <div style={{ marginLeft: 24 }}>
-                    <Title level={4} style={{ margin: 0, fontWeight: 400, color: '#1e293b' }}>
-                        Иван Иванов
-                    </Title>
-                    <Text type="secondary" style={{ fontSize: 15, color: '#64748b' }}>
-                        @ivanov
+const renderProfile = () => (
+    <div style={{ padding: 32, maxWidth: 600, margin: '0 auto' }}>
+        <Title level={3} style={{ marginBottom: 24, fontWeight: 400, color: '#1e293b' }}>
+            Профиль
+        </Title>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 32 }}>
+            <Avatar size={80} icon={<UserOutlined />} style={{ backgroundColor: '#3b82f6' }} />
+            <div style={{ marginLeft: 24 }}>
+                <Title level={4} style={{ margin: 0, fontWeight: 400, color: '#1e293b' }}>
+                    Иван Иванов
+                </Title>
+                <Text type="secondary" style={{ fontSize: 15, color: '#64748b' }}>
+                    @ivanov
+                </Text>
+                <div style={{ marginTop: 8 }}>
+                    <Text style={{ color: '#64748b' }}>
+                        <PhoneOutlined style={{ marginRight: 8 }} />
+                        +7 (999) 123-45-67
                     </Text>
-                    <div style={{ marginTop: 8 }}>
-                        <Text style={{ color: '#64748b' }}>
-                            <PhoneOutlined style={{ marginRight: 8 }} />
-                            +7 (999) 123-45-67
-                        </Text>
-                    </div>
                 </div>
             </div>
-            <Form layout="vertical">
-                <Form.Item label="Имя" name="name">
-                    <Input defaultValue="Иван Иванов" />
-                </Form.Item>
-                <Form.Item label="О себе" name="bio">
-                    <Input.TextArea rows={3} defaultValue="Люблю программирование и минимализм" />
-                </Form.Item>
-                <Form.Item label="Email" name="email">
-                    <Input prefix={<MailOutlined />} defaultValue="ivan@example.com" />
-                </Form.Item>
-                <Button type="primary" style={{ borderRadius: 8 }}>
-                    Сохранить
-                </Button>
-            </Form>
         </div>
-    );
+        <Form
+            layout="vertical"
+            initialValues={{
+                name: 'Иван Иванов',
+                bio: 'Люблю программирование и минимализм',
+                email: 'ivan@example.com',
+            }}
+        >
+            <Form.Item label="Имя" name="name">
+                <Input />
+            </Form.Item>
+            <Form.Item label="О себе" name="bio">
+                <Input.TextArea rows={3} />
+            </Form.Item>
+            <Form.Item label="Email" name="email">
+                <Input prefix={<MailOutlined />} />
+            </Form.Item>
+            <Button type="primary" style={{ borderRadius: 8 }}>
+                Сохранить
+            </Button>
+        </Form>
+    </div>
+);
 
-    const renderSettings = () => (
-        <div style={{ padding: 32, maxWidth: 700, margin: '0 auto' }}>
-            <Title level={3} style={{ marginBottom: 24, fontWeight: 400, color: '#1e293b' }}>
-                Настройки
-            </Title>
-            <Form layout="vertical">
-                <div style={{ marginBottom: 24 }}>
-                    <Text strong style={{ fontSize: 16, color: '#1e293b' }}>
-                        Уведомления
-                    </Text>
-                    <Divider style={{ margin: '12px 0' }} />
-                    <Form.Item label="Push-уведомления" style={{ marginBottom: 12 }}>
-                        <Switch defaultChecked />
-                    </Form.Item>
-                    <Form.Item label="Звук входящих сообщений" style={{ marginBottom: 12 }}>
-                        <Switch defaultChecked />
-                    </Form.Item>
-                </div>
-                <div style={{ marginBottom: 24 }}>
-                    <Text strong style={{ fontSize: 16, color: '#1e293b' }}>
-                        Безопасность
-                    </Text>
-                    <Divider style={{ margin: '12px 0' }} />
-                    <Form.Item label="Двухфакторная аутентификация">
-                        <Button icon={<LockOutlined />} style={{ borderRadius: 8 }}>
-                            Настроить
-                        </Button>
-                    </Form.Item>
-                    <Form.Item label="Активные сеансы">
-                        <Button style={{ borderRadius: 8 }}>Управление устройствами</Button>
-                    </Form.Item>
-                </div>
-            </Form>
-        </div>
-    );
+const renderSettings = () => (
+    <div style={{ padding: 32, maxWidth: 700, margin: '0 auto' }}>
+        <Title level={3} style={{ marginBottom: 24, fontWeight: 400, color: '#1e293b' }}>
+            Настройки
+        </Title>
+        <Form
+            layout="vertical"
+            initialValues={{
+                pushNotifications: true,
+                soundEnabled: true,
+            }}
+        >
+            <div style={{ marginBottom: 24 }}>
+                <Text strong style={{ fontSize: 16, color: '#1e293b' }}>
+                    Уведомления
+                </Text>
+                <Divider style={{ margin: '12px 0' }} />
+                <Form.Item
+                    label="Push-уведомления"
+                    name="pushNotifications"
+                    valuePropName="checked"
+                    style={{ marginBottom: 12 }}
+                >
+                    <Switch />
+                </Form.Item>
+                <Form.Item
+                    label="Звук входящих сообщений"
+                    name="soundEnabled"
+                    valuePropName="checked"
+                    style={{ marginBottom: 12 }}
+                >
+                    <Switch />
+                </Form.Item>
+            </div>
+            <div style={{ marginBottom: 24 }}>
+                <Text strong style={{ fontSize: 16, color: '#1e293b' }}>
+                    Безопасность
+                </Text>
+                <Divider style={{ margin: '12px 0' }} />
+                <Form.Item label="Двухфакторная аутентификация">
+                    <Button icon={<LockOutlined />} style={{ borderRadius: 8 }}>
+                        Настроить
+                    </Button>
+                </Form.Item>
+                <Form.Item label="Активные сеансы">
+                    <Button style={{ borderRadius: 8 }}>Управление устройствами</Button>
+                </Form.Item>
+            </div>
+        </Form>
+    </div>
+);
 
     const renderMainContent = () => {
         switch (activeView) {
