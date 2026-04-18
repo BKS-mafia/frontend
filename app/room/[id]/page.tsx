@@ -1,7 +1,7 @@
 "use client";
 
 import TelegramClone from "@/src/widget/TelegramClone/index";
-
+import {useToken} from "@/src/shared/hooks/useToken"
 
 
 
@@ -122,6 +122,8 @@ const mockMessages: Record<number, MessageDTO[]> = {
 
 // ==================== Компонент ====================
 const Page = () => {
+    const token = useToken();
+    console.log('Токен пользователя:', token);
     return (
         <div>
             <TelegramClone/>

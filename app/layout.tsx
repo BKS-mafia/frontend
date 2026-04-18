@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AntdRegistry } from '@ant-design/nextjs-registry';
+import { TokenProvider } from '@/src/widget/providers/TokenProvider';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,7 +28,9 @@ export default function RootLayout({
         <html lang="ru">
         <body suppressHydrationWarning>
         <AntdRegistry>
-            {children}
+            <TokenProvider>
+                {children}
+            </TokenProvider>
         </AntdRegistry>
         </body>
         </html>
