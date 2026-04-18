@@ -1,5 +1,6 @@
 "use client";
 
+import { useParams } from 'next/navigation'
 import React, { useState, useRef, useEffect } from 'react';
 import {
     Layout,
@@ -159,6 +160,10 @@ const mockMessages: Record<number, MessageDTO[]> = {
 
 // ==================== Компонент ====================
 const TelegramClone: React.FC = () => {
+    const params = useParams(); 
+    const roomId = params.id;
+    console.log(roomId)
+
     const [chats, setChats] = useState<ChatDTO[]>(mockChats);
     const [messages, setMessages] = useState<Record<number, MessageDTO[]>>(mockMessages);
     const [selectedChatId, setSelectedChatId] = useState<number | null>(1);
